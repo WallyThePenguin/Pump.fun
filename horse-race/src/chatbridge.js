@@ -28,17 +28,25 @@
 
   // Public API (for your React/vanilla UI)
   window.PFCBridge = {
+    // low-level send for prepared payloads (no optimistic echo)
+    sendRaw(payload) {
+      if (!payload || typeof payload !== "object") return;
+      send(payload);
+    },
+
     // send a raw chat line to backend (it will process commands & reply back to UI)
     sendChat(user, text) {
-      const msg = String(text || "");
+      const u = (user || "you").trim() || "you";
+      const msg = String(text ?? "").trim();
+      if (!msg) return;
       // echo user's own line immediately (optional UX)
-      dispatchChat(user || "you", msg);
-      send({ type: "chat", user: user || "you", text: msg });
+      dispatchChat(u, msg);
+      send({ type: "chat", user: u, text: msg });
     },
 
     // helper for bets with optimistic UI line exactly as requested
     sendBet(user, amount, horse) {
-      const u = user || "you";
+      const u = (user || "you").trim() || "you";
       const a = Math.max(1, Math.floor(+amount || 0));
       const h = Math.max(1, Math.min(8, Math.floor(+horse || 1)));
 
@@ -140,3 +148,4 @@
     }
   })();
 })();
+

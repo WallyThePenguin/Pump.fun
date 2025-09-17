@@ -12,13 +12,17 @@ const http = require("http");
 const fetch = global.fetch || ((...args) => import("node-fetch").then(({ default: f }) => f(...args)));
 
 // ---------- Config ----------
-const roomId = process.env.pump_fun_token || process.env.PUMP_FUN_TOKEN;
-if (!roomId) {
-  console.error("Set pump_fun_token (or PUMP_FUN_TOKEN) env var");
-  process.exit(1);
+const REQUIRED_ROOM_ID = "3mpnrWoDtsQsmjaQNeB6cfXNgWfXMfwwF6Nu6Due5Guj";
+const envRoom =
+  (process.env.pump_fun_token && process.env.pump_fun_token.trim()) ||
+  (process.env.PUMP_FUN_TOKEN && process.env.PUMP_FUN_TOKEN.trim());
+if (envRoom && envRoom !== REQUIRED_ROOM_ID) {
+  console.warn("[config] Overriding Pump.fun room token from environment.");
 }
+process.env.PUMP_FUN_TOKEN = REQUIRED_ROOM_ID;
+process.env.pump_fun_token = REQUIRED_ROOM_ID;
+const roomId = REQUIRED_ROOM_ID;
 const PORT = Number(process.env.CHAT_BRIDGE_PORT || 4001);
-
 // Your game API endpoints
 const GAME_BASE = process.env.GAME_BASE || "http://localhost:4000";
 const URL_BALANCE = `${GAME_BASE}/balance`;
@@ -251,3 +255,4 @@ function shutdown() {
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+

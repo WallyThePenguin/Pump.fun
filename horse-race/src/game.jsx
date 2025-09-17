@@ -1,6 +1,7 @@
 // src/game.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import RaceTrack from "./RaceTrack";
+import ChatPanel from "./components/ChatPanel";
 import { getOpenRace, createRace, startRace, finishRace, getLeaderboard } from "./api";
 
 /**
@@ -242,53 +243,62 @@ export default function HorseRacingGame() {
   const odds = useMemo(() => new Map(), []);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-      {/* Top bar: controls + leaderboard */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm"
-            onClick={onNewRace}
-          >
-            New Race
-          </button>
-          <button
-            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm disabled:opacity-40"
-            onClick={onStartRace}
-            disabled={!canStart}
-          >
-            Start Race
-          </button>
-          <div className="text-xs text-gray-400 ml-2">
-            Track: {race?.track_len ?? "—"} • Phase: {String(phase).toUpperCase()}
+    <div className="max-w-6xl mx-auto px-4 py-6">
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 space-y-6">
+          {/* Top bar: controls + leaderboard */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm"
+                onClick={onNewRace}
+              >
+                New Race
+              </button>
+              <button
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm disabled:opacity-40"
+                onClick={onStartRace}
+                disabled={!canStart}
+              >
+                Start Race
+              </button>
+              <div className="text-xs text-gray-400 ml-2">
+                Track: {race?.track_len ?? "--"} | Phase: {String(phase).toUpperCase()}
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-300">
+              <span className="opacity-70 mr-2">Leaderboard:</span>
+              {leaderboard.slice(0, 8).map((p, i) => (
+                <span key={p.name} className="mr-3">
+                  {i + 1}. <b>{p.name}</b> {formatCoins(p.balance)}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <RaceTrack
+            horses={horses}
+            positions={positions}
+            trackLen={race?.track_len || 100}
+            phase={phase}
+            events={events}
+            winner={winner}
+            pools={pools}
+            odds={odds}
+          />
+
+          <div className="text-xs text-gray-500">
+            Tips: Use Pump chat commands <code>!bet &lt;amount&gt; &lt;horse 1-8&gt;</code>, <code>!balance</code>,{" "}
+            <code>!leaderboard</code>.
           </div>
         </div>
 
-        <div className="text-xs text-gray-300">
-          <span className="opacity-70 mr-2">🏆 Leaderboard:</span>
-          {leaderboard.slice(0, 8).map((p, i) => (
-            <span key={p.name} className="mr-3">
-              {i + 1}. <b>{p.name}</b> {formatCoins(p.balance)}
-            </span>
-          ))}
+        <div className="w-full lg:max-w-sm">
+          <ChatPanel currentUser="You" />
         </div>
-      </div>
-
-      <RaceTrack
-        horses={horses}
-        positions={positions}
-        trackLen={race?.track_len || 100}
-        phase={phase}
-        events={events}
-        winner={winner}
-        pools={pools}
-        odds={odds}
-      />
-
-      <div className="text-xs text-gray-500">
-        Tips: Use Pump chat commands <code>!bet &lt;amount&gt; &lt;horse 1-8&gt;</code>, <code>!balance</code>,{" "}
-        <code>!leaderboard</code>.
       </div>
     </div>
   );
 }
+

@@ -1,62 +1,71 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+
+const MAX_LINES = 200;
 
 export default function ChatPanel({ currentUser = "User1" }) {
   const [lines, setLines] = useState([]);
   const [text, setText] = useState("");
   const listRef = useRef(null);
 
+  const appendLine = useCallback((entry) => {
+    if (!entry || !entry.text) return;
+    setLines((prev) => [...prev.slice(-(MAX_LINES - 1)), entry]);
+  }, []);
+
   useEffect(() => {
     function onChat(ev) {
       const { user, text } = ev.detail || {};
       if (!text) return;
-      setLines((prev) => [...prev, { user, text }]);
+      appendLine({ user: user || "bridge", text: String(text) });
     }
+
     function onStatus(ev) {
       const s = ev.detail?.status || ev.detail;
-      setLines((prev) => [...prev, { sys: true, text: `[status] ${s}` }]);
+      if (!s) return;
+      appendLine({ sys: true, text: `[status] ${s}` });
     }
+
     window.addEventListener("pfc-chat", onChat);
     window.addEventListener("pfc-status", onStatus);
     return () => {
       window.removeEventListener("pfc-chat", onChat);
       window.removeEventListener("pfc-status", onStatus);
     };
-  }, []);
+  }, [appendLine]);
 
   useEffect(() => {
-    // autoscroll
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+    if (!listRef.current) return;
+    listRef.current.scrollTo({ top: listRef.current.scrollHeight });
   }, [lines]);
-
-  const sendToBackend = (payload) => {
-    // via the bridge IIFE
-    if (window.PFCBridge?.sendRaw) {
-      window.PFCBridge.sendRaw(payload);
-    } else if (window.PFCBridge?.sendChat && typeof payload.text === "string") {
-      window.PFCBridge.sendChat(payload.text, payload.user);
-    }
-  };
 
   const onSubmit = (e) => {
     e.preventDefault();
     const msg = text.trim();
     if (!msg) return;
 
-    // Optimistic UI for bets
-    const m = /^!bet\s+(\d+)\s+(\d+)/i.exec(msg);
-    if (m) {
-      const amount = parseInt(m[1], 10);
-      const horse = parseInt(m[2], 10);
-      if (Number.isFinite(amount) && Number.isFinite(horse)) {
-        setLines((prev) => [...prev, { sys: true, text: `${currentUser} betted ${amount}$ on horse #${horse}` }]);
+    const bridge = window.PFCBridge;
+    const betMatch = /^!bet\s+(\d+)\s+(\d+)/i.exec(msg);
+
+    if (bridge) {
+      if (betMatch && typeof bridge.sendBet === "function") {
+        const amount = parseInt(betMatch[1], 10);
+        const horse = parseInt(betMatch[2], 10);
+        if (Number.isFinite(amount) && Number.isFinite(horse)) {
+          bridge.sendBet(currentUser, amount, horse);
+        } else if (typeof bridge.sendChat === "function") {
+          bridge.sendChat(currentUser, msg);
+        }
+      } else if (typeof bridge.sendChat === "function") {
+        bridge.sendChat(currentUser, msg);
+      } else if (typeof bridge.sendRaw === "function") {
+        bridge.sendRaw({ type: "chat", user: currentUser, text: msg });
+      } else {
+        appendLine({ user: currentUser, text: msg });
       }
+    } else {
+      appendLine({ sys: true, text: "[warn] chat bridge offline; message not sent" });
+      appendLine({ user: currentUser, text: msg });
     }
-
-    // Show user's line immediately
-    setLines((prev) => [...prev, { user: currentUser, text: msg }]);
-
-    // Send to backend for real processing (backend replies will come back as chat lines)
-    sendToBackend({ type: "chat", user: currentUser, text: msg });
 
     setText("");
   };
