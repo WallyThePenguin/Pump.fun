@@ -178,8 +178,19 @@ async function handleCommand(user, text, opts = {}) {
 let chat,
   backoff = 0;
 const MAX_BACKOFF = 60_000;
+const MIN_BACKOFF = 3_000;
+let reconnectTimer = null;
+let connectingPump = false;
 
 async function connectPump() {
+  if (connectingPump) return;
+  connectingPump = true;
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
   if (chat?.disconnect) {
     try {
       chat.disconnect();
@@ -202,13 +213,17 @@ async function connectPump() {
   chat.on?.("disconnected", () => {
     console.log("[Pump] disconnected");
     uiStatus("backoff");
-    scheduleReconnect();
+    scheduleReconnect("disconnect");
   });
 
   chat.on?.("error", (e) => {
-    console.warn("[Pump] error:", e?.message || e);
-    uiStatus("error", { message: e?.message || String(e) });
-    scheduleReconnect();
+    const message = e?.message || String(e);
+    console.warn("[Pump] error:", message);
+    uiStatus("error", { message });
+    if (String(message).includes("429")) {
+      backoff = Math.max(backoff, 30_000);
+    }
+    scheduleReconnect("error");
   });
 
   // Forward Pump chat to UI; handle commands (no sending to Pump)
@@ -224,13 +239,38 @@ async function connectPump() {
     await handleCommand(user, text, { optimisticBetEcho: false });
   });
 
-  await chat.connect();
+  try {
+    await chat.connect();
+  } catch (e) {
+    const message = e?.message || String(e);
+    console.error("[Pump] connect failed:", message);
+    uiStatus("error", { message });
+    scheduleReconnect("connect_failed");
+  } finally {
+    connectingPump = false;
+  }
 }
 
-function scheduleReconnect() {
-  const d = Math.min((backoff || 1000) * 2, MAX_BACKOFF);
-  backoff = d;
-  setTimeout(connectPump, d + Math.floor(Math.random() * 250));
+function scheduleReconnect(reason = "") {
+  if (connectingPump) return;
+  if (reconnectTimer) return;
+
+  const base = backoff || MIN_BACKOFF;
+  const delay = Math.min(Math.max(base, MIN_BACKOFF) * 1.5, MAX_BACKOFF);
+  backoff = delay;
+  const jitter = 250 + Math.floor(Math.random() * 750);
+  const wait = Math.round(delay + jitter);
+  const suffix = reason ? ` (${reason})` : "";
+  console.log(`[Pump] reconnect in ${wait}ms${suffix}`);
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectPump().catch((e) => {
+      const message = e?.message || String(e);
+      console.error("[Pump] reconnect attempt failed:", message);
+      uiStatus("error", { message });
+    });
+  }, wait);
 }
 
 // Start
@@ -255,4 +295,3 @@ function shutdown() {
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
-

@@ -10,6 +10,7 @@
     ws: null,
     tries: 0,
     status: "init",
+    queue: [],
   };
   window.__pfcFrontendBridge = state;
 
@@ -66,12 +67,21 @@
   };
 
   function send(obj) {
+    if (!obj) return;
     try {
       if (state.ws && state.ws.readyState === WebSocket.OPEN) {
         state.ws.send(JSON.stringify(obj));
+        return;
       }
-    } catch {}
+    } catch {
+      // fall through to queue
+    }
+
+    if (!Array.isArray(state.queue)) state.queue = [];
+    state.queue.push(obj);
+    if (state.queue.length > 50) state.queue.shift();
   }
+
 
   (async function connectLoop() {
     while (state.alive) {
@@ -114,6 +124,15 @@
       state.tries = 0;
       setStatus("open");
 
+      const pending = Array.isArray(state.queue) ? state.queue.splice(0, state.queue.length) : [];
+      if (pending.length) {
+        pending.forEach((payload) => {
+          try {
+            ws.send(JSON.stringify(payload));
+          } catch {}
+        });
+      }
+
       ws.addEventListener("message", (ev) => {
         let data = null;
         try {
@@ -135,7 +154,14 @@
       });
 
       await new Promise((resolve) => {
-        ws.addEventListener("close", () => resolve(), { once: true });
+        ws.addEventListener(
+          "close",
+          () => {
+            state.ws = null;
+            resolve();
+          },
+          { once: true }
+        );
         ws.addEventListener("error", () => {
           try {
             ws.close();
