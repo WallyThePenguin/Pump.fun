@@ -1,0 +1,37 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans",
+    "Droid Sans", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: url("./assets/stable_bg.png") no-repeat center center fixed;
+  background-size: cover;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+/* index.css */
+/* Make the app area fill the viewport */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Wrapper that fills the screen */
+.race-wrap {
+  height: 100vh; /* full screen */
+  width: 100%;
+}
+
+/* Stretch the background image to the wrapper EXACTLY.
+   This keeps 8 evenly spaced brown lines aligned to your 8 lanes. */
+.race-bg {
+  background-image: url("./assets/stable_bg.png"); /* your second image */
+  background-repeat: no-repeat;
+  background-position: left top; /* anchor at top-left so lines start at the very top */
+  background-size: 100% 100%; /* <-- key: stretch to container, no “cover” */
+}

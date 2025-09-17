@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "node-fetch": "^3.3.2",
+    "pump-chat-client": "^1.0.1",
+    "pump-fun-chat-mcp": "^2.1.1",
+    "ws": "^8.18.3"
+  }
+}
