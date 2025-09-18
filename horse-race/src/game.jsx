@@ -1,5 +1,5 @@
 // src/game.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import RaceTrack from "./RaceTrack";
 import ChatPanel from "./components/ChatPanel";
 import { getOpenRace, createRace, startRace, finishRace, getLeaderboard } from "./api";
@@ -13,38 +13,42 @@ import { getOpenRace, createRace, startRace, finishRace, getLeaderboard } from "
  */
 const TICK_MS = 95; // slower updates for longer, more suspenseful races
 
-const BASE_VEL_MIN = 0.35;
-const BASE_VEL_MAX = 1.0;
-const ACCEL_MIN = -0.08;
-const ACCEL_MAX = 0.12;
-const MAX_VEL = 1.8;
-const MIN_VEL = 0.12;
+const BASE_VEL_MIN = 0.45;
+const BASE_VEL_MAX = 0.85;
+const ACCEL_MIN = -0.05;
+const ACCEL_MAX = 0.09;
+const MAX_VEL = 1.35;
+const MIN_VEL = 0.25;
 
 // random events dial
 const EVENTS_CHANCE_PER_TICK = 0.035; // 3.5% per tick per horse
 const EVENT_COOLDOWN_TICKS = 6; // after any event fires for a horse
 const SHIELD_DURATION_TICKS = 4;
+const EVENT_BADGE_TTL = 14; // ticks to display effect badges
+const CONFETTI_DURATION_MS = 2600;
 
 // mild, readable effects
 const BOOST_VEL = 0.55;
-const GUST_VEL = 0.35;
-const SLOW_VEL = 0.5;
-const STUMBLE_VEL = 0.1;
+const GUST_VEL = 0.32;
+const SLOW_VEL = 0.45;
+const STUMBLE_VEL = 0.12;
 const WARP_MIN = 1.0;
-const WARP_MAX = 2.2;
-const SURGE_MIN = 2.2;
-const SURGE_MAX = 3.2;
+const WARP_MAX = 2.0;
+const SURGE_MIN = 2.1;
+const SURGE_MAX = 2.8;
 const BETTING_SECONDS = 30;
 const COOLDOWN_SECONDS = 15;
 
+const SHIELD_ICON = "\uD83D\uDEE1";
+
 const EVENT_BANDS = [
-  { key: 'boost', label: '⚡', p: 0.22 },
-  { key: 'slow', label: '🍌', p: 0.18 },
-  { key: 'gust', label: '💨', p: 0.15 },
-  { key: 'stumble', label: '💥', p: 0.13 },
-  { key: 'shield', label: '🛡️', p: 0.06 },
-  { key: 'warp', label: '✨', p: 0.08 },
-  { key: 'surge', label: '🚀', p: 0.08 },
+  { key: "boost", label: "\u26A1", p: 0.22 },
+  { key: "slow", label: "\uD83D\uDC0C", p: 0.18 },
+  { key: "gust", label: "\uD83D\uDCA8", p: 0.15 },
+  { key: "stumble", label: "\u274C", p: 0.13 },
+  { key: "shield", label: SHIELD_ICON, p: 0.06 },
+  { key: "warp", label: "\u2728", p: 0.08 },
+  { key: "surge", label: "\uD83D\uDE80", p: 0.08 },
 ];
 
 function rand(min, max) {
@@ -62,6 +66,12 @@ function formatClock(seconds) {
   const s = Math.floor(seconds % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) return "--";
+  return value >= 10 ? Math.round(value) + "%" : value.toFixed(1) + "%";
+}
+
 
 const STAGE_TITLES = {
   loading: "Preparing New Race",
@@ -89,12 +99,16 @@ export default function HorseRacingGame() {
   const [positions, setPositions] = useState([]); // numbers 0..track_len
   const [events, setEvents] = useState({}); // per index, string emoji
   const [winner, setWinner] = useState(null);
+  const [confettiBurst, setConfettiBurst] = useState(false);
 
   const frameRef = useRef(null);
   const stateRef = useRef(null); // hold live physics state between ticks
   const countdownTimersRef = useRef({ tick: null, stage: null });
   const runningRef = useRef(false);
   const recoveryRef = useRef(null);
+  const confettiTimerRef = useRef(null);
+  const oddsNoiseRef = useRef([]);
+  const oddsSignalRef = useRef([]);
 
   // refresh leaderboard periodically
   useEffect(() => {
@@ -189,6 +203,12 @@ export default function HorseRacingGame() {
     }, seconds * 1000);
   }
 
+  function bumpOddsSignal(index, delta) {
+    const signals = oddsSignalRef.current;
+    if (!Array.isArray(signals) || index < 0 || index >= signals.length) return;
+    signals[index] = clamp(signals[index] + delta, -0.45, 0.55);
+  }
+
   function scheduleRecovery(delay = 5000) {
     if (recoveryRef.current) return;
     recoveryRef.current = setTimeout(async () => {
@@ -222,6 +242,13 @@ export default function HorseRacingGame() {
       clearTimeout(recoveryRef.current);
       recoveryRef.current = null;
     }
+    if (confettiTimerRef.current) {
+      clearTimeout(confettiTimerRef.current);
+      confettiTimerRef.current = null;
+    }
+    setConfettiBurst(false);
+    oddsNoiseRef.current = Array.from({ length: horseCount }, () => (Math.random() - 0.5) * 0.24);
+    oddsSignalRef.current = Array.from({ length: horseCount }, () => 0);
     runningRef.current = false;
     setStage("betting");
     setLastResult(null);
@@ -284,33 +311,41 @@ export default function HorseRacingGame() {
         state.cool[index] = EVENT_COOLDOWN_TICKS;
 
         switch (band.key) {
-        case 'boost':
-          state.vel[index] = clamp(state.vel[index] + BOOST_VEL, MIN_VEL, MAX_VEL);
-          return band.label;
-        case 'slow':
-          if (state.shield[index] > 0) {
-            return '🛡️';
-          }
-          state.vel[index] = Math.max(MIN_VEL, state.vel[index] - SLOW_VEL);
-          return band.label;
-        case 'gust':
-          state.vel[index] = clamp(state.vel[index] + GUST_VEL, MIN_VEL, MAX_VEL);
-          return band.label;
-        case 'stumble':
-          if (state.shield[index] > 0) {
-            return '🛡️';
-          }
-          state.vel[index] = STUMBLE_VEL;
-          return band.label;
-        case 'shield':
-          state.shield[index] = SHIELD_DURATION_TICKS;
-          return band.label;
-        case 'warp':
-          state.pos[index] += rand(WARP_MIN, WARP_MAX);
-          return band.label;
-        case 'surge':
-          state.pos[index] += rand(SURGE_MIN, SURGE_MAX);
-          return band.label;
+          case "boost":
+            state.vel[index] = clamp(state.vel[index] + BOOST_VEL, MIN_VEL, MAX_VEL);
+            bumpOddsSignal(index, 0.18);
+            return band.label;
+          case "slow":
+            if (state.shield[index] > 0) {
+              bumpOddsSignal(index, 0.05);
+              return SHIELD_ICON;
+            }
+            state.vel[index] = Math.max(MIN_VEL, state.vel[index] - SLOW_VEL);
+            bumpOddsSignal(index, -0.22);
+            return band.label;
+          case "gust":
+            state.vel[index] = clamp(state.vel[index] + GUST_VEL, MIN_VEL, MAX_VEL);
+            bumpOddsSignal(index, 0.12);
+            return band.label;
+          case "stumble":
+            if (state.shield[index] > 0) {
+              bumpOddsSignal(index, 0.04);
+              return SHIELD_ICON;
+            }
+            state.vel[index] = STUMBLE_VEL;
+            bumpOddsSignal(index, -0.24);
+            return band.label;
+          case "shield":
+            state.shield[index] = SHIELD_DURATION_TICKS;
+            bumpOddsSignal(index, 0.1);
+            return band.label;
+          case "warp":
+            state.pos[index] += rand(WARP_MIN, WARP_MAX);
+            bumpOddsSignal(index, 0.22);
+            return band.label;
+          case "surge":
+            state.pos[index] += rand(SURGE_MIN, SURGE_MAX);
+            bumpOddsSignal(index, 0.26);
             return band.label;
           default:
             return null;
@@ -324,12 +359,20 @@ export default function HorseRacingGame() {
   function runAnimation() {
     const trackLen = race?.track_len || 120;
     const N = horses.length || 8;
+    if (!Array.isArray(oddsNoiseRef.current) || oddsNoiseRef.current.length !== N) {
+      oddsNoiseRef.current = Array.from({ length: N }, () => (Math.random() - 0.5) * 0.2);
+    }
+    if (!Array.isArray(oddsSignalRef.current) || oddsSignalRef.current.length !== N) {
+      oddsSignalRef.current = Array.from({ length: N }, () => 0);
+    }
 
     const s = {
       pos: Array.from({ length: N }, () => 0),
       vel: Array.from({ length: N }, () => rand(BASE_VEL_MIN, BASE_VEL_MAX)),
       shield: Array.from({ length: N }, () => 0),
       cool: Array.from({ length: N }, () => 0), // per-horse event cooldown
+      fxTimer: Array.from({ length: N }, () => 0),
+      fxLabel: Array.from({ length: N }, () => null),
     };
     stateRef.current = s;
 
@@ -347,7 +390,14 @@ export default function HorseRacingGame() {
 
         // random event (at most one per tick)
         const ev = maybeEventFor(i, st);
-        if (ev) newEvents[i] = ev;
+        if (ev) {
+          st.fxTimer[i] = EVENT_BADGE_TTL;
+          st.fxLabel[i] = ev;
+        }
+        if (st.fxTimer[i] > 0) {
+          st.fxTimer[i] -= 1;
+          newEvents[i] = st.fxLabel[i];
+        }
 
         // shield decay
         if (st.shield[i] > 0) st.shield[i]--;
@@ -384,6 +434,11 @@ export default function HorseRacingGame() {
 
         await refreshLeaderboard();
         setLastResult(summary);
+        if (confettiTimerRef.current) {
+          clearTimeout(confettiTimerRef.current);
+        }
+        setConfettiBurst(true);
+        confettiTimerRef.current = setTimeout(() => setConfettiBurst(false), CONFETTI_DURATION_MS);
         startCooldown();
       }
     }, TICK_MS);
@@ -399,6 +454,10 @@ export default function HorseRacingGame() {
         clearTimeout(recoveryRef.current);
         recoveryRef.current = null;
       }
+      if (confettiTimerRef.current) {
+        clearTimeout(confettiTimerRef.current);
+        confettiTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -406,10 +465,64 @@ export default function HorseRacingGame() {
   const stageTitle = STAGE_TITLES[stage] || "Stable Stakes";
   const stageMessage = STAGE_MESSAGES[stage] || "Automated races running 24/7.";
   const countdownDisplay = stage === "racing" ? "LIVE" : countdown != null ? formatClock(countdown) : "--:--";
+  const trackLen = race?.track_len || 0;
+  const payouts = (lastResult?.result?.winners || []).slice().sort((a, b) => b.amount - a.amount);
+  const moneyLeaders = payouts.slice(0, 5);
+  const totalPool = lastResult?.result?.totalPool ?? null;
+  const afterHouse = lastResult?.result?.afterHouse ?? null;
+  const oddsBoard = useMemo(() => {
+    if (!horses.length) return [];
+    const len = trackLen > 0 ? trackLen : 100;
+    if (!Array.isArray(oddsNoiseRef.current) || oddsNoiseRef.current.length !== horses.length) {
+      oddsNoiseRef.current = Array.from({ length: horses.length }, () => (Math.random() - 0.5) * 0.24);
+    }
+    if (!Array.isArray(oddsSignalRef.current) || oddsSignalRef.current.length !== horses.length) {
+      oddsSignalRef.current = Array.from({ length: horses.length }, () => 0);
+    }
+    const noises = oddsNoiseRef.current;
+    const signals = oddsSignalRef.current;
+    const leaderPos = positions.reduce((max, value) => (value != null && value > max ? value : max), 0);
+    const lastWinnerSlot = lastResult?.winner ?? null;
+    const equalShare = horses.length ? 1 / horses.length : 0;
+
+    const weights = horses.map((horse, idx) => {
+      const slot = horse.slot ?? idx;
+      const emoji = horse.emoji || "\uD83D\uDC0E";
+      const base = 1;
+      const noise = noises[idx] ?? 0;
+      const signal = signals[idx] ?? 0;
+      const pos = positions[idx] ?? 0;
+      const progress = stage === "racing" ? Math.min(pos / Math.max(len, 1), 1) : 0;
+      const leaderGap = stage === "racing" ? Math.max(leaderPos - pos, 0) / Math.max(len, 1) : 0;
+      const comebackBonus = leaderGap * 0.18;
+      const momentum = stage === "racing" ? progress * 0.6 : 0;
+      const legacy = stage === "betting" && lastWinnerSlot != null ? (slot === lastWinnerSlot ? -0.05 : 0.03) : 0;
+      const weight = Math.max(0.2, base + noise + signal + momentum + comebackBonus + legacy);
+      return { slot, emoji, weight };
+    });
+
+    const temperature = stage === "racing" ? 0.55 : 0.75;
+    const scaled = weights.map((entry) => ({
+      ...entry,
+      scaled: Math.pow(entry.weight, 1 / Math.max(temperature, 0.2)),
+    }));
+
+    const scaledTotal = scaled.reduce((sum, entry) => sum + entry.scaled, 0) || 1;
+
+    return scaled
+      .map(({ slot, emoji, scaled }) => {
+        const share = scaled / scaledTotal;
+        const softened = share * 0.8 + equalShare * 0.2;
+        const percent = Math.max(0, Math.min(100, Math.round(softened * 1000) / 10));
+        return { slot, emoji, percent };
+      })
+      .sort((a, b) => (b.percent === a.percent ? a.slot - b.slot : b.percent - a.percent));
+  }, [horses, positions, stage, trackLen, lastResult]);
+  const winningHorse = lastResult?.winner != null ? horses[lastResult.winner] : null;
+  const winnerSlot = winningHorse?.slot ?? (lastResult?.winner ?? null);
+  const winnerEmoji = winningHorse?.emoji || (winnerSlot != null ? "\uD83D\uDC0E" : null);
+  const winnerPayouts = payouts.slice(0, 3);
   const topLeaderboard = leaderboard.slice(0, 6);
-  const winningHorse = winner != null ? horses[winner] : null;
-  const showWinnerSlot = stage === "cooldown" && winningHorse;
-  const winnerPayouts = (lastResult?.result?.winners || []).slice(0, 3);
 
   return (
     <div className="app-shell">
@@ -433,16 +546,30 @@ export default function HorseRacingGame() {
             stage={stage}
             events={events}
             winner={winner}
+            showConfetti={confettiBurst}
           />
         </section>
 
-        <aside className="side-stack">
-          {showWinnerSlot && (
-            <div className="card winner-slot">
-              <div className="winner-emoji">{winningHorse.emoji}</div>
-              <div className="winner-details">
-                <span className="winner-label">Winner</span>
-                <span className="winner-horse">#{(winningHorse.slot ?? winner) + 1}</span>
+        <aside className="side-grid">
+          <div className="side-column">
+            {stage === "cooldown" && winnerSlot != null && winnerEmoji && (
+              <div className="card winner-card">
+                <div className="card-header winner-header">
+                  <span>Last Winner</span>
+                  <span className={"winner-badge winner-badge--" + stage}>{stageTitle}</span>
+                </div>
+                <div className="winner-body">
+                  <span className="winner-emoji">{winnerEmoji}</span>
+                  <div className="winner-meta">
+                    <span className="winner-label">Horse #{(winnerSlot ?? 0) + 1}</span>
+                    {totalPool != null && (
+                      <span className="winner-sub">Pool: {formatCoins(totalPool)} coins</span>
+                    )}
+                    {afterHouse != null && (
+                      <span className="winner-sub winner-sub--highlight">Paid: {formatCoins(afterHouse)} coins</span>
+                    )}
+                  </div>
+                </div>
                 {winnerPayouts.length ? (
                   <ul className="winner-payouts">
                     {winnerPayouts.map((entry) => (
@@ -453,34 +580,102 @@ export default function HorseRacingGame() {
                     ))}
                   </ul>
                 ) : (
-                  <span className="winner-note">Settling payouts...</span>
+                  <div className="winner-note">No winning bets recorded.</div>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="card leaderboard-card">
-            <div className="card-header">
-              <span>Leaderboard</span>
+            <div className="card odds-card">
+              <div className="card-header odds-header">
+                <span>Win Odds</span>
+                <span className="odds-phase">{stageTitle}</span>
+              </div>
+              <ul className="odds-list">
+                {oddsBoard.length ? (
+                  oddsBoard.map((entry, index) => (
+                    <li key={entry.slot}>
+                      <div className="odds-left">
+                        <span className="odds-rank">#{index + 1}</span>
+                        <span className="odds-emoji">{entry.emoji}</span>
+                        <span className="odds-label">Horse #{entry.slot + 1}</span>
+                      </div>
+                      <span className="odds-value">{formatPercent(entry.percent)}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="empty">Waiting for roster...</li>
+                )}
+              </ul>
             </div>
-            <ul>
-              {topLeaderboard.map((player, index) => (
-                <li key={player.name}>
-                  <span>
-                    {index + 1}. {player.name}
-                  </span>
-                  <span>{formatCoins(player.balance)}</span>
-                </li>
-              ))}
-              {!topLeaderboard.length && <li className="empty">Waiting for first bets...</li>}
-            </ul>
+
+            <ChatPanel />
           </div>
 
-          <ChatPanel />
+          <div className="side-column">
+            <div className="card money-card">
+              <div className="card-header money-header">
+                <span>Money Leaderboard</span>
+                <div className="card-metrics">
+                  {totalPool != null && (
+                    <span className="card-subtitle">Pool: {formatCoins(totalPool)}</span>
+                  )}
+                  {afterHouse != null && (
+                    <span className="card-subtitle">Paid: {formatCoins(afterHouse)} coins</span>
+                  )}
+                </div>
+              </div>
+              <ul className="money-list">
+                {moneyLeaders.length ? (
+                  moneyLeaders.map((entry, idx) => (
+                    <li key={entry.name}>
+                      <span className="money-rank">{idx + 1}.</span>
+                      <span className="money-name">{entry.name}</span>
+                      <span className="money-amount">{formatCoins(entry.amount)} coins</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="empty">No payouts yet...</li>
+                )}
+              </ul>
+            </div>
+
+            <div className="card leaderboard-card">
+              <div className="card-header">
+                <span>Player Balances</span>
+              </div>
+              <ul>
+                {topLeaderboard.map((player, index) => (
+                  <li key={player.name}>
+                    <span>
+                      {index + 1}. {player.name}
+                    </span>
+                    <span>{formatCoins(player.balance)}</span>
+                  </li>
+                ))}
+                {!topLeaderboard.length && <li className="empty">Waiting for first bets...</li>}
+              </ul>
+            </div>
+          </div>
         </aside>
       </div>
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

@@ -1,8 +1,8 @@
-﻿import React, { useMemo } from "react";
+import React, { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 /**
- * Visual horse race renderer with winner banner + confetti.
+ * Visual horse race renderer with lightweight confetti overlay.
  */
 export default function RaceTrack({
   horses = [],
@@ -11,24 +11,26 @@ export default function RaceTrack({
   stage = "betting",
   events = {},
   winner = null,
+  showConfetti = false,
 }) {
-  const highlightWinner = stage === "cooldown" && winner != null;
-  const confetti = useMemo(
+  const confettiPieces = useMemo(
     () =>
-      Array.from({ length: 24 }, (_, i) => ({
+      Array.from({ length: 28 }, (_, i) => ({
         id: i,
-        emoji: ["🎉", "✨", "🥇", "🎊"][i % 4],
+        emoji: ["🎉", "✨", "🥳", "🎊", "💥", "💫"][i % 6],
         x: Math.random() * 100,
         d: 0.9 + Math.random() * 0.8,
       })),
     []
   );
 
-  const getProgress = (idx) => {
+  const runnerPercent = (idx) => {
     const pos = positions[idx] ?? 0;
-    const pct = trackLen > 0 ? Math.min(100, (pos / trackLen) * 100) : 0;
-    return `${pct}%`;
+    if (!Number.isFinite(pos) || trackLen <= 0) return 0;
+    return Math.min(97, Math.max(0, (pos / trackLen) * 100));
   };
+
+  const barWidth = (pct) => Math.min(100, pct + 3);
 
   return (
     <div className="track-card">
@@ -40,16 +42,18 @@ export default function RaceTrack({
       <div className="track-surface">
         {horses.length ? (
           horses.map((horse, idx) => {
-            const progress = getProgress(idx);
-            const isWinner = highlightWinner && winner === idx;
+            const pct = runnerPercent(idx);
             return (
-              <div key={horse.slot ?? idx} className={`track-lane ${isWinner ? "lane-winner" : ""}`}>
+              <div key={horse.slot ?? idx} className="track-lane">
                 <div className="lane-background" />
-                <div className="lane-progress" style={{ width: progress }} />
+                <div
+                  className="lane-progress"
+                  style={{ width: `${barWidth(pct)}%` }}
+                />
                 <motion.div
                   className="lane-runner"
                   initial={false}
-                  animate={{ left: progress }}
+                  animate={{ left: `${pct}%` }}
                   transition={{ type: "spring", stiffness: 160, damping: 22 }}
                 >
                   <span className="lane-emoji">{horse.emoji || "🐎"}</span>
@@ -72,34 +76,31 @@ export default function RaceTrack({
             );
           })
         ) : (
-          <div className="track-empty">Awaiting next line-up…</div>
+          <div className="track-empty">Awaiting next line-up...</div>
         )}
       </div>
 
       <AnimatePresence>
-        {highlightWinner && winner != null && horses[winner] && (
+        {showConfetti && (
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            className="track-banner"
+            key="confetti"
+            className="confetti-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
           >
-            <span className="banner-text">
-              Winner: {horses[winner].emoji} #{(horses[winner].slot ?? winner) + 1}
-            </span>
-            <div className="confetti-wrap" aria-hidden>
-              {confetti.map((piece) => (
-                <motion.span
-                  key={piece.id}
-                  className="confetti-piece"
-                  initial={{ opacity: 0, y: -20, x: `${piece.x}%`, rotate: 0 }}
-                  animate={{ opacity: 1, y: "120%", rotate: 360 }}
-                  transition={{ duration: 1.6 * piece.d, ease: "easeOut" }}
-                >
-                  {piece.emoji}
-                </motion.span>
-              ))}
-            </div>
+            {confettiPieces.map((piece) => (
+              <motion.span
+                key={piece.id}
+                className="confetti-piece"
+                initial={{ opacity: 0, y: -20, x: `${piece.x}%`, rotate: 0 }}
+                animate={{ opacity: 1, y: "120%", rotate: 360 }}
+                transition={{ duration: 1.6 * piece.d, ease: "easeOut" }}
+              >
+                {piece.emoji}
+              </motion.span>
+            ))}
           </motion.div>
         )}
       </AnimatePresence>

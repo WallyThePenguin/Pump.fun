@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-const MAX_LINES = 200;
+const MAX_LINES = 12;
 
 export default function ChatPanel() {
   const [lines, setLines] = useState([]);
