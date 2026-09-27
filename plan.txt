@@ -1,0 +1,71 @@
+Chicken Adventure – AI Story Game Roadmap
+
+1. Core Narrative Loop
+   - Define story state model (scene id, recap, options, winner, tallies, timestamp).
+   - Integrate generative AI service with “The Road Never Ends” template.
+   - Implement scene generator that consumes short history + current relics/stats.
+   - Ensure options follow format: exactly three, 3–7 words, mutually exclusive, forward-moving.
+
+2. Wallet Linking & Identity
+   - `!link` command: signature challenge ? bind chat handle ? wallet.
+   - Persist links in SQLite; include verification timestamp & signature hash.
+   - Cache balances for duration of session; refresh if older than 5 minutes.
+
+3. Token Weighting & Economy
+   - Fetch SPL balance for configured mint via Solana RPC.
+   - Voting power: `sqrt(balance)` rounded down (min 1) + tier bonuses (Bronze/Silver/Gold thresholds).
+   - Optional per-vote micro-fee (burn/treasury) configurable in `.env`.
+
+4. Voting Engine & Scene Flow
+   - State machine: idle ? presenting_scene ? voting_open ? voting_closed ? resolving.
+   - Commands: `!vote A/B/C`, `!state`, admin `!startstory`, `!regen`, `!endstory`, `!extend`.
+   - Enforce 60–90s timer; live tally updates broadcast to UI & chat.
+   - Resolve ties randomly among top scorers; log deterministic seed.
+
+5. Persistence & Data Model
+   - Tables: `story_scenes`, `story_votes`, `wallet_links`, `balance_cache`, `story_progress`, `economy_events`.
+   - Store recap snippet (last 3 scenes) for prompt context.
+   - Capture voter hashes + weight for auditability.
+
+6. Backend Services
+   - Extend `server.js`:
+     * `POST /story/start` – initialize run, seed first scene.
+     * `POST /story/vote` – record weighted vote, return updated tallies.
+     * `POST /story/resolve` – close round, call AI for outcome, persist new scene.
+     * `GET /story/status` – expose current scene, timer, tallies, relic count.
+     * `GET /story/history` – paginate prior scenes with winning options.
+   - Modularize AI client with retry/backoff + censorship filter.
+
+7. Frontend & UI/UX\r\n   - Lives in 'chickenstory/' dynamic client scaffold.\r\n   - Replace race track view with “Chicken Adventure” board:
+     * Scene text, optional illustration placeholder, three voting buttons.
+     * Countdown bar, weighted tally bars (color-coded A/B/C).
+     * Lore sidebar (relics, recent decisions, Clucky mood).
+     * Chat panel retains status feed + system announcements.
+   - Responsive layout: two columns primary (scene + voting) and secondary (lore + chat).
+
+8. Story Progression Systems
+   - Track relics, chicken stats (courage, luck) that influence future prompts.
+   - Inject mini-boss events every N scenes with special rules (double cost, longer timer).
+   - Support unlockable skins/cosmetics triggered by community milestones.
+
+9. Ops & Tooling
+   - Store API keys in `.env`; add config validation at boot.
+   - Rate limit AI calls; handle quota errors gracefully (fallback scene text).
+   - Nightly backup of story tables; CLI to export story run as markdown.
+   - Observability: log vote totals, GPT latency, RPC errors.
+
+10. Launch Plan
+    - Phase 0: Prototype AI scene + manual votes (dev CLI).
+    - Phase 1: Wallet linking + weighted voting backend complete.
+    - Phase 2: Ship redesigned frontend with voting UI & timer.
+    - Phase 3: Add relic progression, cosmetic unlocks, per-vote fees.
+    - Phase 4: Marketing blitz—teaser clips, how-to-vote tutorial overlay, pump.fun announcement.
+    - Phase 5: Post-launch analytics & tuning (vote window, fee %, AI tone).
+11. Chat Intelligence Layer
+    - Log every Pump chat line via `/chat/ingest` (SQLite `chat_messages`) capped to ~300 rows.
+    - Expose `/chat/theme` snapshot service returning top unigrams, bigrams, meme heuristics.
+    - Route `!commands` through `/commands/ingest` for centralized parsing and throttling.
+    - Feed theme data into AI scene prompts and vote-resolution bias (`vibeBoost`) with safety caps.
+    - Provide admin reset tools to prune chat memory between chapters or on moderation events.
+
+

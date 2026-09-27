@@ -1,0 +1,30 @@
+(backend tasks in pumpfun2/backend2, frontend in pumpfun2/chickenstory)
+TODO – Chicken Adventure Story Game
+
+[ ] Choose AI provider + model (gpt-4o-mini vs. Claude) and cost guardrails.
+[ ] Draft reusable prompt template with guardrails + system message.
+[ ] Design SQLite migrations for story tables + balance cache.
+[ ] Implement wallet link signature flow (`!link`) and persistence.
+[ ] Build Solana RPC helper + caching strategy for token balances.
+[ ] Develop vote weight service (sqrt + tier bonuses, TTL refresh).
+[ ] Extend backend with /story endpoints and state machine.
+[ ] Wire AI client + retry logic + moderation filter.
+[ ] Implement admin commands (`!startstory`, `!regen`, `!extend`, `!endstory`).
+[ ] Redesign frontend layout for scene text, options, timer, tally bars, lore sidebar.
+[ ] Hook frontend to live tally updates + countdown.
+[ ] Update chat bridge to announce scenes/options/results + handle `!vote` replies.
+[ ] Add relic/cosmetic progression state tracking.
+[ ] Integrate optional per-vote token fee and treasury logging.
+[ ] QA: balance fetch failures, tie resolution, link throttling, AI fallbacks.
+[ ] Documentation: setup guide, environment variables, operating procedure.
+[ ] Launch assets: overlay graphics, teaser copy, walkthrough video.
+[ ] Add `/chat/ingest` endpoint + SQLite pruning logic (keep ~300 recent lines).
+[ ] Build `/chat/theme` analyzer (unigrams/bigrams/meme heuristics).
+[ ] Update chat bridge to forward every message + command stream to backend.
+[ ] Implement vibeBoost helper + tie-in to scene prompts and vote resolution.
+[ ] Create moderation controls to clear chat memory / disable influence temporarily.
+[ ] Scaffold backend2 project structure (Express/Fastify + socket bridge).
+[ ] Write migrations + repositories in backend2/db.
+[ ] Initialize chickenstory React/Vite app with typed API client.
+[ ] Implement websocket/SSE bridge between backend2 and chickenstory for tallies/images.
+

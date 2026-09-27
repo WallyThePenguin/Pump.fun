@@ -1,0 +1,36 @@
+Chicken Adventure – “The Road Never Ends”
+
+Premise
+- Clucky, a sentient chicken blessed (or cursed) with infinite curiosity, roams a universe where every “road” is a portal to another realm.
+- The audience, acting as the mysterious “Coop Collective,” guides Clucky’s choices through token-weighted votes. More feathers (tokens), more influence.
+
+Tone & Style
+- Playful, witty narration with occasional meta humor about streaming and crypto culture.
+- Stakes balance comedy and tension: failures trigger humorous setbacks, successes unlock lore breadcrumbs.
+- Limit scene length (120–180 words) to keep the pace snappy for live streams.
+
+Narrative Loop
+1. Recap: Remind players of the last choice and consequence.
+2. New Road: AI generates a fresh environment (cyberpunk skyway, lava river, bureaucratic DMV line, etc.).
+3. Present exactly three options (3–7 words) for crossing or surviving this “road.”
+4. Voting Window: 60–90 seconds; weighted by sqrt(token balance).
+5. Resolution: Winning option plays out, affecting Clucky’s inventory, mood, or the broader quest.
+
+Progression & Arcs
+- Every 5 scenes, trigger a mini-arc climax (boss obstacle, moral dilemma, or rare ally).
+- Track “Feather Relics” collected via successful crossings—after collecting 7, reveal the hidden objective: deliver the Golden Egg to restore the Cosmic Coop.
+
+Economy Hooks
+- Token-gated voting; non-holders watch & cheer.
+- Optional per-vote tribute (micro-burn or treasury donation).
+- Cosmetic unlocks (skins, hats, mounts) revealed when community completes milestone crossings.
+
+Moderation Guards
+- Enforce prompt safety: no gore, hate, NSFW. Lean into clever absurdity.
+- Provide admin override to regenerate or manually edit scenes.
+- Maintain a PG-13 ceiling for YouTube/Twitch compliance.
+
+Why It’s Manageable
+- Leverages existing chat bridge, wallet mapping, and SQLite persistence.
+- Scene prompts are short; AI call cadence is predictable (one per round).
+- Token mechanics align with pump.fun culture while keeping things fun & fair.
